@@ -60,10 +60,10 @@ def create_ticket():
             }
         post_body = json.dumps(ticket_data)
         response = requests.post(post_url, data=post_body, headers=post_header)
-        print(f"Response: {response}")
+        print(f"Response - Status Code: {response.status_code}")
     
-
+print(devices)
 notify_stakeholders()
 create_ticket()
 
-verify_dns(fix=True)
+verify_dns(devices, fix=True)
