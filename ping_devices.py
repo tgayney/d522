@@ -90,6 +90,7 @@ def verify_dns(fix_devices=None, fix=False):
                     f"echo -e \"nameserver {dns_servers[0]}\nnameserver {dns_servers[1]}\" | \
                     sudo tee /etc/resolv.conf > /dev/null"
                     )
+                    print(output)
 
             elif Target["device_type"] == "vyos":
                 output = connection.send_command("show dns forwarding statistics")

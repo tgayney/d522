@@ -62,7 +62,7 @@ def create_ticket():
         response = requests.post(post_url, data=post_body, headers=post_header)
         print(f"Response - Status Code: {response.status_code}")
     
-print(devices)
+
 notify_stakeholders()
 create_ticket()
 
