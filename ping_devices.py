@@ -15,7 +15,7 @@ def verify_connectivity(fix=False):
         local_os_ping_option = "-n"
     elif sys.platform == "linux":  # Run linux cmd
         local_os_ping_option = "-c"
-    print(f"\n\nOG device list {device_list}")
+    
     for device in device_list:
         if fix == True:  # Troubleshoot and fix devices that have been determined to be faulty
             if device["Device Name"] in ["DNS1", "DNS2"]:
@@ -81,8 +81,8 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
         with ConnectHandler(**Target) as connection:
             device["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             if fix == True:
-                if device["Device Name"] in dns_servers:
-                    if device["state active"] != True:
+                if device["Device Address"] in dns_servers:
+                    if device.get("state active") != True:
                         output = connection.send_command(
                             "sudo systemctl restart named"
                         )
@@ -92,6 +92,7 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
                         )
                         
                         print(output + "\n\n")
+                    
                     
                 
                 else:
