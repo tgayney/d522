@@ -63,7 +63,50 @@ def create_ticket():
         print(f"Response - Status Code: {response.status_code}")
     
 
+def send_Resolution():
+    device_list = []
+    conn = smtplib.SMTP("smtp.d522.wgu.internal", 1025)
+    conn.ehlo()
+    conn.login("tgayne1@wgu.edu", "password")
+
+    for resolution in devices:
+        device_list.append(f"{resolution["Device Name"]}:{resolution["Device Address"]}")
+    device_list = ", ".join(device_list)
+
+    resolution_Notification_Email = f"""
+    Dear Stakeholders, 
+
+    
+
+    This is an automated notification to inform you that the DNS service issue and all related device compromises have been successfully resolved. The following devices were affected and have now been remediated: 
+
+    
+
+    {device_list} 
+
+    
+
+    No further action is required at this time. If you have any questions or concerns, please contact the IT support team. 
+
+    
+
+    Thank you for your attention. 
+
+    
+
+    Best regards,   
+
+    Network Monitoring System
+    """
+
+    conn.sendmail(
+                "tgayne1@wgu.edu", 
+                "stakeholder@wgu.edu", 
+                resolution_Notification_Email.replace("—", "-")
+                )
+
+
 notify_stakeholders()
 create_ticket()
-
 verify_dns(devices, fix=True)
+send_Resolution()

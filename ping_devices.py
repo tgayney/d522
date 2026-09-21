@@ -3,6 +3,7 @@ from devices_list import get_devices_list
 import sys
 from netmiko import ConnectHandler
 import time
+from datetime import datetime
 
 
 
@@ -10,17 +11,17 @@ def verify_connectivity(fix=False):
     reachable_devices = []
     compromised_devices = []
     device_list = get_devices_list()
-    if sys.platform == "win32":
+    if sys.platform == "win32":  # Run windows cmd
         local_os_ping_option = "-n"
-    elif sys.platform == "linux":
+    elif sys.platform == "linux":  # Run linux cmd
         local_os_ping_option = "-c"
     for device in device_list:
-        if fix == True:
+        if fix == True:  # Troubleshoot and fix devices that have been determined to be faulty
             if device["Device Name"] in ["DNS1", "DNS2"]:
                 reachable_devices.append(device)
             
 
-        else:
+        else:  # Check ping status (4 times due to ARP) and DNS settings
             if device["Device Address"] in ["None", "DHCP", "10.10.10.100"]:
                 continue
 
@@ -32,17 +33,17 @@ def verify_connectivity(fix=False):
             
 
             
-            if result.returncode == 0:
+            if result.returncode == 0:  # Ping success
                 print(f"SUCCESS: {device["Device Name"]} is reachable")
                 reachable_devices.append(device)
-            else:
+            else:  # Ping failure
                 print(f"ERROR: {device["Device Name"]} is not reachable")
                 compromised_devices.append(device)
                 continue
     print("\n\n")
     return reachable_devices, compromised_devices
 
-def verify_dns(fix_devices=None, fix=False):
+def verify_dns(fix_devices=None, fix=False):  # Check DNS
     if fix == True:
         network_devices, _ = verify_connectivity(fix=True)
     
@@ -75,22 +76,45 @@ def verify_dns(fix_devices=None, fix=False):
 
 
         with ConnectHandler(**Target) as connection:
-            device["timestamp"] = time.localtime(time.time())
+            device["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             if fix == True:
-                if device["Device Address"] in dns_servers:
-                    output = connection.send_command("systemctl --no-pager status systemd-resolved")
-                    print(output + "\n\n")
-                    output = connection.send_command("sudo systemctl restart systemd-resolved")
-                    time.sleep(3)
-                    output = connection.send_command("systemctl status --no-pager systemd-resolved")
-                    print(output + "\n\n")
-                elif device["Device Name"] in [d["Device Name"] for d in fix_devices]:
-                    print(device)
+                if device["Device Address"] in dns_servers:  # Verify and fix DNS named service
                     output = connection.send_command(
-                    f"echo -e \"nameserver {dns_servers[0]}\nnameserver {dns_servers[1]}\" | \
-                    sudo tee /etc/resolv.conf > /dev/null"
+                        "systemctl --no-pager status named"
                     )
-                    print(output)
+                    print(output + "\n\n")
+                    output = connection.send_command(
+                        "systemctl --no-pager status named | grep 'Active'"
+                    )
+                    output = output.replace("Active:", "").lstrip().rstrip()
+                    if output == "inactive (dead)":  # Restarting named if down
+                        output = connection.send_command(
+                            "sudo systemctl restart named"
+                        )
+                        time.sleep(3)
+                        output = connection.send_command(
+                            "systemctl status --no-pager named"
+                        )
+                        print(output + "\n\n")
+                        continue
+                
+                for d in fix_devices:  # Fixing devices with bad DNS settings
+                    print(device["Device Name"])
+                    print(d["Device Name"])
+                    is_match = device["Device Name"] == d["Device Name"]
+                    is_match2 = device.get("Device Name") == d.get("Device Name")
+                    print(f"check 1 {is_match}, check 2 {is_match2}")
+                    if device["Device Name"] == d["Device Name"]:
+                        print("\n\n\n\nthisisrunning\n\n\n")
+                        output = connection.send_command(
+                            "cat /etc/resolv.conf"
+                        )
+                        print(f"Current DNS Settings: {output}\n")
+                        output = connection.send_command(
+                        f"echo -e \"nameserver {dns_servers[0]}\nnameserver {dns_servers[1]}\" | \
+                        sudo tee /etc/resolv.conf > /dev/null"
+                        )
+                        print(f"Updated DNS Settings: {output}\n")
 
             elif Target["device_type"] == "vyos":
                 output = connection.send_command("show dns forwarding statistics")
