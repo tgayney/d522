@@ -15,6 +15,7 @@ def verify_connectivity(fix=False):
         local_os_ping_option = "-n"
     elif sys.platform == "linux":  # Run linux cmd
         local_os_ping_option = "-c"
+    print(f"\n\nOG device list {device_list}")
     for device in device_list:
         if fix == True:  # Troubleshoot and fix devices that have been determined to be faulty
             if device["Device Name"] in ["DNS1", "DNS2"]:
@@ -46,10 +47,12 @@ def verify_connectivity(fix=False):
 def verify_dns(fix_devices=None, fix=False):  # Check DNS
     if fix == True:
         network_devices, _ = verify_connectivity(fix=True)
+        print(f"\n\n\n\n NETWORK DEVICES \n\n\n\n {network_devices}")
     
         
     else:    
         network_devices, compromised_devices = verify_connectivity()
+
     dns_servers = ["10.10.10.10", "10.10.10.20"]
 
     for device in network_devices:
@@ -78,16 +81,8 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
         with ConnectHandler(**Target) as connection:
             device["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             if fix == True:
-                if device["Device Address"] in dns_servers:  # Verify and fix DNS named service
-                    output = connection.send_command(
-                        "systemctl --no-pager status named"
-                    )
-                    print(output + "\n\n")
-                    output = connection.send_command(
-                        "systemctl --no-pager status named | grep 'Active'"
-                    )
-                    output = output.replace("Active:", "").lstrip().rstrip()
-                    if output == "inactive (dead)":  # Restarting named if down
+                if device["Device Name"] in dns_servers:
+                    if device["state active"] != True:
                         output = connection.send_command(
                             "sudo systemctl restart named"
                         )
@@ -95,34 +90,51 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
                         output = connection.send_command(
                             "systemctl status --no-pager named"
                         )
+                        
                         print(output + "\n\n")
-                        continue
+                    
                 
-                for d in fix_devices:  # Fixing devices with bad DNS settings
-                    print(device["Device Name"])
-                    print(d["Device Name"])
-                    is_match = device["Device Name"] == d["Device Name"]
-                    is_match2 = device.get("Device Name") == d.get("Device Name")
-                    print(f"check 1 {is_match}, check 2 {is_match2}")
-                    if device["Device Name"] == d["Device Name"]:
-                        print("\n\n\n\nthisisrunning\n\n\n")
-                        output = connection.send_command(
-                            "cat /etc/resolv.conf"
-                        )
-                        print(f"Current DNS Settings: {output}\n")
-                        output = connection.send_command(
-                        f"echo -e \"nameserver {dns_servers[0]}\nnameserver {dns_servers[1]}\" | \
-                        sudo tee /etc/resolv.conf > /dev/null"
-                        )
-                        print(f"Updated DNS Settings: {output}\n")
+                else:
+                    for d in fix_devices:  # Fixing devices with bad DNS settings
+                        print(device["Device Name"])
+                        print(d["Device Name"])
+                        is_match = device["Device Name"] == d["Device Name"]
+                        is_match2 = device.get("Device Name") == d.get("Device Name")
+                        print(f"check 1 {is_match}, check 2 {is_match2}")
+                        if device["Device Name"] == d["Device Name"]:
+                            print("\n\n\n\nthisisrunning\n\n\n")
+                            output = connection.send_command(
+                                "cat /etc/resolv.conf"
+                            )
+                            print(f"Current DNS Settings: {output}\n")
+                            output = connection.send_command(
+                            f"echo -e \"nameserver {dns_servers[0]}\nnameserver {dns_servers[1]}\" | \
+                            sudo tee /etc/resolv.conf > /dev/null"
+                            )
+                            print(f"Updated DNS Settings: {output}\n")
 
             elif Target["device_type"] == "vyos":
                 output = connection.send_command("show dns forwarding statistics")
                 print(f"{device["Device Name"]} is configured correctly")
             elif device["Device Address"] in dns_servers:
-                continue
+                output = connection.send_command(
+                    "systemctl --no-pager status named"
+                )
+                print(output + "\n\n")
+                output = connection.send_command(
+                    "systemctl --no-pager status named | grep 'Active'"
+                )
+                output = output.replace("Active:", "").lstrip().rstrip()
+                if output != "active (running)":  # Create ticket if DNS named down
+                    device["description"] = f"Issue type: {device["Device Name"]}  \n\n\
+                    Accepted DNS service state: active (running)  \n\n\
+                    Detected DNS servers state: {", ".join(output)}"
+                    device["state active"] = False
+                    compromised_devices.append(device)
+                else:
+                    continue
             else:
-                connection.send_command("sudo systemctl start systemd-resolved")
+                
                 output = connection.send_command("resolvectl status | grep 'DNS Servers'")
                 extracted_dns = (
                     output.replace("DNS Servers:", "").replace("127.0.0.1", "")
