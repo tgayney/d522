@@ -7,7 +7,7 @@ from datetime import datetime
 
 
 
-def verify_connectivity(fix=False):
+def verify_connectivity():
     reachable_devices = []
     compromised_devices = []
     device_list = get_devices_list()
@@ -17,37 +17,32 @@ def verify_connectivity(fix=False):
         local_os_ping_option = "-c"
     
     for device in device_list:
-        if fix == True:  # Troubleshoot and fix devices that have been determined to be faulty
-            if device["Device Name"] in ["DNS1", "DNS2"]:
-                reachable_devices.append(device)
-            
+        # Check ping status (4 times due to ARP) and DNS settings
+        if device["Device Address"] in ["None", "DHCP", "10.10.10.100"]:
+            continue
 
-        else:  # Check ping status (4 times due to ARP) and DNS settings
-            if device["Device Address"] in ["None", "DHCP", "10.10.10.100"]:
-                continue
-
-            result = subprocess.run(
-                    ["ping", local_os_ping_option, "4", device["Device Address"]],
-                    capture_output=True,
-                    text=True
-                    )
+        result = subprocess.run(
+            ["ping", local_os_ping_option, "4", device["Device Address"]],
+            capture_output=True,
+            text=True
+        )
             
 
             
-            if result.returncode == 0:  # Ping success
-                print(f"SUCCESS: {device["Device Name"]} is reachable")
-                reachable_devices.append(device)
-            else:  # Ping failure
-                print(f"ERROR: {device["Device Name"]} is not reachable")
-                compromised_devices.append(device)
-                continue
+        if result.returncode == 0:  # Ping success
+            print(f"SUCCESS: {device["Device Name"]} is reachable")
+            reachable_devices.append(device)
+        else:  # Ping failure
+            print(f"ERROR: {device["Device Name"]} is not reachable")
+            compromised_devices.append(device)
+            continue
     print("\n\n")
     return reachable_devices, compromised_devices
 
 def verify_dns(fix_devices=None, fix=False):  # Check DNS
     if fix == True:
-        network_devices, _ = verify_connectivity(fix=True)
-        print(f"\n\n\n\n NETWORK DEVICES \n\n\n\n {network_devices}")
+        network_devices = fix_devices
+        
     
         
     else:    
@@ -79,10 +74,12 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
 
 
         with ConnectHandler(**Target) as connection:
-            device["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if fix != True:
+                device["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             if fix == True:
                 if device["Device Address"] in dns_servers:
                     if device.get("state active") != True:
+                        print(f"\n\n\nRestarting DNS service for {device["Device Name"]}")
                         output = connection.send_command(
                             "sudo systemctl restart named"
                         )
@@ -95,24 +92,21 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
                     
                     
                 
-                else:
-                    for d in fix_devices:  # Fixing devices with bad DNS settings
-                        print(device["Device Name"])
-                        print(d["Device Name"])
-                        is_match = device["Device Name"] == d["Device Name"]
-                        is_match2 = device.get("Device Name") == d.get("Device Name")
-                        print(f"check 1 {is_match}, check 2 {is_match2}")
-                        if device["Device Name"] == d["Device Name"]:
-                            print("\n\n\n\nthisisrunning\n\n\n")
-                            output = connection.send_command(
-                                "cat /etc/resolv.conf"
-                            )
-                            print(f"Current DNS Settings: {output}\n")
-                            output = connection.send_command(
-                            f"echo -e \"nameserver {dns_servers[0]}\nnameserver {dns_servers[1]}\" | \
-                            sudo tee /etc/resolv.conf > /dev/null"
-                            )
-                            print(f"Updated DNS Settings: {output}\n")
+                else:  # Fixing devices with bad DNS settings
+                
+                    print(f"\n\n\n\nFixing Server: {device["Device Name"]}\n\n\n")
+                    output = connection.send_command(
+                        "cat /etc/resolv.conf"
+                    )
+                    print(f"Current DNS Settings: {output}\n")
+                    output = connection.send_command(
+                    f'echo -e "nameserver {dns_servers[0]}\\nnameserver {dns_servers[1]}" | \
+                    sudo tee /etc/resolv.conf > /dev/null'
+                    )
+                    output = connection.send_command(
+                        "cat /etc/resolv.conf"
+                    )
+                    print(f"Updated DNS Settings: {output}\n")
 
             elif Target["device_type"] == "vyos":
                 output = connection.send_command("show dns forwarding statistics")
@@ -123,13 +117,14 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
                 )
                 print(output + "\n\n")
                 output = connection.send_command(
-                    "systemctl --no-pager status named | grep 'Active'"
+                    "systemctl --no-pager status named | grep 'Active' | awk '{print $2 $3}'"
                 )
                 output = output.replace("Active:", "").lstrip().rstrip()
-                if output != "active (running)":  # Create ticket if DNS named down
+                print(f"\n\n\n{output}\n\n\n")
+                if output != "active(running)":  # Create ticket if DNS named down
                     device["description"] = f"Issue type: {device["Device Name"]}  \n\n\
-                    Accepted DNS service state: active (running)  \n\n\
-                    Detected DNS servers state: {", ".join(output)}"
+                    Accepted DNS service state: active(running)  \n\n\
+                    Detected DNS servers state: {output}"
                     device["state active"] = False
                     compromised_devices.append(device)
                 else:
