@@ -6,6 +6,12 @@ import time
 from datetime import datetime
 
 
+def update_log(name):
+    logfile = open("log.txt", "a")
+    time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    logfile.write(f"{name}'s DNS service is functioning correctly and is stable at {time}\n")
+    logfile.close()
+
 
 def verify_connectivity():
     reachable_devices = []
@@ -31,9 +37,13 @@ def verify_connectivity():
             
         if result.returncode == 0:  # Ping success
             print(f"SUCCESS: {device["Device Name"]} is reachable")
+            device["Reachability"] = True
             reachable_devices.append(device)
         else:  # Ping failure
             print(f"ERROR: {device["Device Name"]} is not reachable")
+            device["Reachability"] = False
+            device["description"] = f"Issue type: \
+                {device["Device Name"]} is unreachable"
             compromised_devices.append(device)
             continue
     print("\n\n")
@@ -87,8 +97,8 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
                         output = connection.send_command(
                             "systemctl status --no-pager named"
                         )
-                        
                         print(output + "\n\n")
+                        update_log(device["Device Name"])
                     
                     
                 
@@ -107,10 +117,12 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
                         "cat /etc/resolv.conf"
                     )
                     print(f"Updated DNS Settings: {output}\n")
+                    update_log(device["Device Name"])
 
             elif Target["device_type"] == "vyos":
                 output = connection.send_command("show dns forwarding statistics")
                 print(f"{device["Device Name"]} is configured correctly")
+                update_log(device["Device Name"])
             elif device["Device Address"] in dns_servers:
                 output = connection.send_command(
                     "systemctl --no-pager status named"
@@ -128,6 +140,7 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
                     device["state active"] = False
                     compromised_devices.append(device)
                 else:
+                    update_log(device["Device Name"])
                     continue
             else:
                 
@@ -142,6 +155,7 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
                 
                     
                 else:
+                    device["Current DNS Setting"] = extracted_dns
                     device["description"] = f"Issue type: {device["Device Name"]}  \n\n\
                     Accepted DNS servers: {", ".join(dns_servers)}  \n\n\
                     Detected DNS servers: {", ".join(extracted_dns)}  \n\n\

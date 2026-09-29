@@ -21,3 +21,5 @@ def get_devices_list() -> list:
             device_name_list.append(device["Device Name"])
     print(device_name_list)
     return device_list
+
+get_devices_list()

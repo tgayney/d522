@@ -2,10 +2,11 @@ import smtplib
 from ping_devices import verify_dns
 import requests
 import json
+from dns_backup import backup
 
 
 devices = verify_dns()
-
+Expected_DNS_Setting = ["10.10.10.10", "10.10.10.20"]
 
 def notify_stakeholders():
     
@@ -13,27 +14,72 @@ def notify_stakeholders():
     conn = smtplib.SMTP("smtp.d522.wgu.internal", 1025)
     conn.ehlo()
     conn.login("tgayne1@wgu.edu", "password")
-
+    
+    
     for device in devices:
+        if device["Reachability"] == False:
+            email_template_notification = f"""
+            Subject: Network Device Unavailable: {device["Device Name"]} ({device["IP Address"]})\n\n 
 
-        email_template_notification = f"""
-        Subject: URGENT: Device Compromise Detected—Immediate Attention Required\n\n 
+            Dear Network Administrator, 
 
-        Dear Stakeholders, 
+            
 
-        This is an automated alert to inform you that the following device(s) have been identified as compromised during the recent network scan: 
+            This is an automated notification that the following network device is currently unavailable: 
 
-        Device Name: {device["Device Name"]} 
-        IP Address: {device["Device Address"]} 
-        Last Checked: {device["timestamp"]}
+            
 
-        Immediate investigation and remediation are recommended to prevent further impact. 
+            Device Name: {device["Device Name"]} 
+            IP Address: {device["Device Address"]} 
+            Last Checked: {device["timestamp"]}
 
-        If you have any questions or require additional information, please contact the IT support team. 
+            
 
-        Best regards,   
-        Network Monitoring System
-        """
+            Please investigate this issue at your earliest convenience. 
+
+            
+
+            Best regards,   
+
+            Network Monitoring System 
+            """
+
+        elif sorted(device["Current DNS Setting"]) != sorted(Expected_DNS_Setting):
+            email_template_notification = f"""
+            Subject: DNS Configuration Alert: {device["Device Name"]} ({device["IP Address"]})\n\n 
+
+            Dear Network Administrator, 
+
+            
+
+            This is an automated alert that the DNS configuration for the following device has been altered from the expected settings: 
+
+            
+
+            Device Name: {device["Device Name"]} 
+
+            IP Address: {device["IP Address"]} 
+
+            Detected DNS Setting: {device["Current DNS Setting"]} 
+
+            Expected DNS Setting: {" ".join(Expected_DNS_Setting)} 
+
+            Time Detected: {device["Time stamp"]} 
+
+            
+
+            The system will attempt to automatically correct this configuration. 
+
+            
+
+            Best regards,   
+
+            Network Monitoring System  
+            """
+
+        else:
+            continue
+
         
         conn.sendmail(
             "tgayne1@wgu.edu", 
@@ -42,25 +88,48 @@ def notify_stakeholders():
             )
 
 
-def create_ticket():
+def ticket():
     post_url = "http://helpdesk.d522.wgu.internal:5000/api/tickets"
-    post_header = {
+    ticket_header = {
         "Authorization": "Bearer vGkbXkGLqQSo7YLflp9DutuG8st4xdPPF7wnTcwB0FE", 
         "Content-Type": "application/json"
         }
     for device in devices:
 
-        ticket_data = {
-            "assigned_to": "network-team",
-            "description": f"{device["description"]}",  # Need to create an a new dictionary value in devices for this
-            "priority": "high",
-            "requester_email": "dns-monitor@d522.wgu.internal",
-            "status": "open",
-            "title": f"{device["Device Name"]} DNS Issue"
-            }
-        post_body = json.dumps(ticket_data)
-        response = requests.post(post_url, data=post_body, headers=post_header)
-        print(f"Response - Status Code: {response.status_code}")
+        if device["Device Address"] in Expected_DNS_Setting:
+            continue
+
+        elif sorted(device["Current DNS Setting"]) != \
+            sorted(Expected_DNS_Setting):
+            ticket_data = {
+                "assigned_to": "network-team",
+                "description": f"{device["description"]}",
+                "priority": "high",
+                "requester_email": "dns-monitor@d522.wgu.internal",
+                "status": "open",
+                "title": f"{device["Device Name"]} Issue"
+                }
+            post_body = json.dumps(ticket_data)
+            response = requests.post(
+                post_url, 
+                data=post_body, 
+                headers=ticket_header)
+            print(f"Response - Status Code: {response.status_code}")
+            device["ticket id"] = response.json()
+
+        elif sorted(device["Current DNS Setting"]) == \
+            sorted(Expected_DNS_Setting):
+            patch_url = f"{post_url}/{device["ticket id"]}"
+            ticket_data = {
+                "status": "resolved",
+                }
+            patch_body = json.dumps(ticket_data)
+            response = requests.patch(
+                patch_url, 
+                data=patch_body, 
+                headers=ticket_header)
+            print(f"Response - Status Code: {response.status_code}")
+            
     
 
 def send_Resolution():
@@ -105,8 +174,9 @@ def send_Resolution():
                 resolution_Notification_Email.replace("—", "-")
                 )
 
-
+backup()
 notify_stakeholders()
-create_ticket()
+ticket()
 verify_dns(devices, fix=True)
 send_Resolution()
+ticket()
