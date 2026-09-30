@@ -92,6 +92,7 @@ def notify_stakeholders():
 
 
 def ticket():
+    global devices
     post_url = "http://helpdesk.d522.wgu.internal:5000/api/tickets"
     ticket_header = {
         "Authorization": "Bearer vGkbXkGLqQSo7YLflp9DutuG8st4xdPPF7wnTcwB0FE", 
@@ -117,6 +118,7 @@ def ticket():
             print(f"Response - Status Code: {response.status_code}")
             response_dict = response.json()
             device["ticket id"] = response_dict["id"]
+            devices.remove(device)
         
         elif device["Device Address"] in Expected_DNS_Setting:
             continue
@@ -145,7 +147,7 @@ def ticket():
             print(f"Running PATCH PORTION OF CODE FOR: {device}")
             patch_url = f"{post_url}/{device["ticket id"]}"
             ticket_data = {
-                "status": "resolved",
+                "status": "resolved"
                 }
             patch_body = json.dumps(ticket_data)
             response = requests.patch(
@@ -167,7 +169,7 @@ def send_Resolution():
         
         if resolution["DNS Issue"] == True:
             email_template_notification = f"""
-                Subject: DNS Configuration Corrected: {resolution["Device Name"]} ({resolution["IP Address"]})
+                Subject: DNS Configuration Corrected: {resolution["Device Name"]} ({resolution["Device Address"]})
                 Dear Network Administrator, 
 
                 The DNS configuration issue previously detected on the following device has been automatically corrected: 

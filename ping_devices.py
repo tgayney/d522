@@ -63,6 +63,7 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
         network_devices, compromised_devices = verify_connectivity()
 
     dns_servers = ["10.10.10.10", "10.10.10.20"]
+    loopback_dns = ["127.0.0.53"]
 
     for device in network_devices:
         if device["Reachability"] == False:
@@ -112,19 +113,18 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
                 
                     print(f"\n\n\n\nFixing Server: {device["Device Name"]}\n\n\n")
                     print(f"Current DNS Settings: {device["Current DNS Setting"]}\n")
-                    output = connection.send_command(
+                    connection.send_command(
                     f'echo -e "nameserver {dns_servers[0]}\\nnameserver {dns_servers[1]}" | \
-                    sudo tee /etc/resolv.conf > /dev/null', read_timeout=50
+                    sudo tee /etc/resolv.conf > /dev/null', read_timeout=60
                     )
-                    
                     connection.send_command("sudo systemctl enable systemd-resolved --now")
-                    print(f"Updated DNS Settings: {output}\n")
                     time.sleep(10)
                     output = connection.send_command(
                         "cat /etc/resolv.conf | grep 'nameserver' | awk '{print $2}'"
                     )
                     device["Current DNS Setting"] = output.split()
                     update_log(device["Device Name"])
+                    print(f"Updated DNS Settings: {output}\n")
 
             elif Target["device_type"] == "vyos":
                 output = connection.send_command("show dns forwarding statistics")
@@ -154,11 +154,14 @@ def verify_dns(fix_devices=None, fix=False):  # Check DNS
                 
                 output = connection.send_command("cat /etc/resolv.conf | grep 'nameserver' | awk '{print $2}'")
                 extracted_dns = output.split()
-                print(extracted_dns)
                 
-                if sorted(dns_servers) == sorted(extracted_dns):
+                    
+                
+                if sorted(extracted_dns) == sorted(dns_servers):
                     print(f"{device["Device Name"]} is configured correctly")
-                
+
+                elif sorted(extracted_dns) == sorted(loopback_dns):
+                    print(f"{device["Device Name"]} is configured correctly")
                     
                 else:
                     device["Current DNS Setting"] = extracted_dns
