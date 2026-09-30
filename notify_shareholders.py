@@ -6,7 +6,6 @@ from dns_backup import backup
 
 
 devices = verify_dns()
-print(devices)
 Expected_DNS_Setting = ["10.10.10.10", "10.10.10.20"]
 
 def notify_stakeholders():
@@ -18,7 +17,7 @@ def notify_stakeholders():
     
     
     for device in devices:
-        print(f"Running notify stakeholder: {device}")
+        print(f"Running notify stakeholder of: {device["Device Name"]}")
         if device["Reachability"] == False:
             email_template_notification = f"""
             Subject: Network Device Unavailable: {device["Device Name"]} ({device["Device Address"]})\n\n 
@@ -92,17 +91,14 @@ def notify_stakeholders():
 
 
 def ticket():
-    print(f"\n\n{devices}\n\n")
     counter = 0
-    ticket_devices = devices
+    ticket_devices = devices.copy()
     post_url = "http://helpdesk.d522.wgu.internal:5000/api/tickets"
     ticket_header = {
         "Authorization": "Bearer vGkbXkGLqQSo7YLflp9DutuG8st4xdPPF7wnTcwB0FE", 
         "Content-Type": "application/json"
         }
     for device in ticket_devices:
-        print(f"\n\nloop iteration {counter}: list state \n{devices}\n\n")
-        print(f"this is the device running: {device}")
 
         if device["Reachability"] == False:
             ticket_data = {
@@ -122,6 +118,7 @@ def ticket():
             response_dict = response.json()
             device["ticket id"] = response_dict["id"]
             del devices[counter]
+            print(f"\n\nthis is ticket_devices: {id(ticket_devices)}\n\n this is devices: {id(devices)}\n\n")
         
         elif device["Device Address"] in Expected_DNS_Setting:
             print(f"\n\n\nThis device is in DNS {device["Device Name"]} check?\n\n\n")
