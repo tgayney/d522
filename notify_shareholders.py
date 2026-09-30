@@ -92,13 +92,16 @@ def notify_stakeholders():
 
 
 def ticket():
-    global devices
+    print(f"\n\n{devices}\n\n")
+    counter = 0
+    ticket_devices = devices
     post_url = "http://helpdesk.d522.wgu.internal:5000/api/tickets"
     ticket_header = {
         "Authorization": "Bearer vGkbXkGLqQSo7YLflp9DutuG8st4xdPPF7wnTcwB0FE", 
         "Content-Type": "application/json"
         }
-    for device in devices:
+    for device in ticket_devices:
+        print(f"\n\nloop iteration {counter}: list state \n{devices}\n\n")
         print(f"this is the device running: {device}")
 
         if device["Reachability"] == False:
@@ -118,13 +121,27 @@ def ticket():
             print(f"Response - Status Code: {response.status_code}")
             response_dict = response.json()
             device["ticket id"] = response_dict["id"]
-            devices.remove(device)
+            del devices[counter]
         
         elif device["Device Address"] in Expected_DNS_Setting:
+            print(f"\n\n\nThis device is in DNS {device["Device Name"]} check?\n\n\n")
             continue
 
-        elif sorted(device["Current DNS Setting"]) != \
+        elif sorted(device["Current DNS Setting"]) == \
             sorted(Expected_DNS_Setting):
+            print(f"Running PATCH PORTION OF CODE FOR: \n{device}")
+            patch_url = f"{post_url}/{device["ticket id"]}"
+            ticket_data = {
+                "status": "resolved"
+                }
+            patch_body = json.dumps(ticket_data)
+            response = requests.patch(
+                patch_url, 
+                data=patch_body, 
+                headers=ticket_header)
+            print(f"Response - Status Code: {response.status_code}")
+
+        elif device["DNS Issue"] == True:
             ticket_data = {
                 "assigned_to": "network-team",
                 "description": f"{device["description"]}",
@@ -141,20 +158,11 @@ def ticket():
             print(f"Response - Status Code: {response.status_code}")
             response_dict = response.json()
             device["ticket id"] = response_dict["id"]
+            print(device)
 
-        elif sorted(device["Current DNS Setting"]) == \
-            sorted(Expected_DNS_Setting):
-            print(f"Running PATCH PORTION OF CODE FOR: {device}")
-            patch_url = f"{post_url}/{device["ticket id"]}"
-            ticket_data = {
-                "status": "resolved"
-                }
-            patch_body = json.dumps(ticket_data)
-            response = requests.patch(
-                patch_url, 
-                data=patch_body, 
-                headers=ticket_header)
-            print(f"Response - Status Code: {response.status_code}")
+        else:
+            print(f"\n\n\nThis device didn't match any if in ticket() {device["Device Name"]} check?\n\n\n")
+        counter += 1
             
     
 
